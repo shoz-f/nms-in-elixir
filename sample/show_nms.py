@@ -45,12 +45,12 @@ def load_boxes(fname):
 # Description:  
 # Dependencies: 
 ################################################################################
-def draw_boxes(im, boxes, color='#FFFFFF'):
+def draw_boxes(im, boxes, color='#FFFFFF', width=3):
   w, h = im.size
   draw = ImageDraw.Draw(im)
   
   for y1,x1,y2,x2 in boxes:
-    draw.rectangle((int(w*x1), int(h*y1), int(w*x2), int(h*y2)), outline=color)
+    draw.rectangle((int(w*x1), int(h*y1), int(w*x2), int(h*y2)), outline=color, width=width)
 
 #<SUBROUTINE>###################################################################
 # Function:     draw box on image
@@ -85,6 +85,8 @@ if __name__ == '__main__':
                       help="print item classes")
   parser.add_argument('-c', '--color', default='#FFFFFF',
                       help="default color")
+  parser.add_argument('-b', '--border', type=int, default=3,
+                      help="border width of box")
   args = parser.parse_args()
   
   classes = load_boxes(args.tbl)
@@ -100,7 +102,7 @@ if __name__ == '__main__':
 
   im = Image.open(args.img)
   for item,color in items:
-    draw_boxes(im, classes[item], color)
+    draw_boxes(im, classes[item], color, args.border)
   
   if not args.quiet:
     im.show()
