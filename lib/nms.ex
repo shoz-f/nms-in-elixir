@@ -4,7 +4,9 @@ defmodule Nms do
   """
   
   # candidate features 
-  defstruct score: 0.0, box: [0.0, 0.0, 1.0, 1.0], area: 1.0
+  defmodule BBox do
+    defstruct score: 0.0, box: [0.0, 0.0, 1.0, 1.0], area: 1.0
+  end
 
   ##############################################################################
   # parameter file loader
@@ -21,7 +23,7 @@ defmodule Nms do
     try do
       { :ok,
         File.stream!(fname)
-          |> Enum.map(formatter)
+          |> Stream.map(formatter)
           |> (if transposed?, do: &transposed/1, else: &(&1)).()}
     rescue
       File.Error -> {:error, fname}
@@ -47,7 +49,7 @@ defmodule Nms do
   get the transposed table.
   """
   def transposed(mat) do
-    Enum.zip(mat) |> Enum.map(&Tuple.to_list/1)
+    Stream.zip(mat) |> Enum.map(&Tuple.to_list/1)
   end
 
   ##############################################################################
@@ -58,7 +60,7 @@ defmodule Nms do
   """
   def puts_boxes(device, {class, boxes}) do
     IO.puts(device, "#{class}:")
-    Enum.each(boxes, fn %Nms{box: [x1,y1,x2,y2]} ->
+    Enum.each(boxes, fn %BBox{box: [x1,y1,x2,y2]} ->
       IO.puts(device, "#{x1} #{y1} #{x2} #{y2}")
     end)
   end
@@ -72,8 +74,8 @@ defmodule Nms do
   def multi_non_maximum_suppression(classes, scores, boxes, threshold \\ 0.0, iou_threshold \\ 1.0) do
     areas = Enum.map(boxes, fn [x1,y1,x2,y2] -> (x2-x1)*(y2-y1) end)  # pre-calculation for efficiency.
 
-    Enum.zip(classes, scores)
-    |> Enum.map(&non_maximum_suppression(&1, boxes, areas, threshold, iou_threshold))
+    Stream.zip(classes, scores)
+    |> Stream.map(&non_maximum_suppression(&1, boxes, areas, threshold, iou_threshold))
     |> Enum.filter(&(&1)) # remove nil
   end
 
@@ -81,12 +83,12 @@ defmodule Nms do
   execute non-maximum-suppression for a given class.
   """
   def non_maximum_suppression({class, scores}, boxes, areas, threshold \\ 0.0, iou_threshold \\ 1.0) do
-    # make a list of candidates in ascending order of their scores,
+    # make a list of candidates in descent order of scores,
     # and remove those whose scores are less than the threshold.
     candidates =
-      Enum.zip([scores, boxes, areas])
-      |> Enum.filter(fn {score, _, _} -> score > threshold end)
-      |> Enum.map(fn {score, box, area} -> %Nms{score: score, box: box, area: area} end)
+      Stream.zip([scores, boxes, areas])
+      |> Stream.filter(fn {score, _, _} -> score > threshold end)
+      |> Stream.map(fn {score, box, area} -> %BBox{score: score, box: box, area: area} end)
       |> Enum.sort(&(&1.score >= &2.score))
 
     if candidates != [], do: {class, hard_nms_loop(candidates, iou_threshold, [])}
@@ -99,7 +101,7 @@ defmodule Nms do
   defp hard_nms_loop([highest|rest], iou_threshold, result) do
     # update the list by removing candidates whose iou is greater than the iou_threshold.
     candidates =
-      Enum.map(rest, &if(iou(&1, highest) < iou_threshold, do: &1))
+      Stream.map(rest, &if(iou(&1, highest) < iou_threshold, do: &1))
       |> Enum.filter(&(&1)) # remove nil
 
     # and repeat again.
@@ -110,7 +112,7 @@ defmodule Nms do
   Intersection over Union
   calculate the iou of the highest box (a) and the other one (b).
   """
-  def iou(%Nms{box: [bx1,by1,bx2,by2], area: barea}, %Nms{box: [ax1,ay1,ax2,ay2], area: aarea}) do
+  def iou(%BBox{box: [bx1,by1,bx2,by2], area: barea}, %BBox{box: [ax1,ay1,ax2,ay2], area: aarea}) do
     x1 = if bx1 > ax1, do: bx1, else: ax1  # max
     y1 = if by1 > ay1, do: by1, else: ay1  # max
     x2 = if bx2 < ax2, do: bx2, else: ax2  # min
@@ -119,7 +121,7 @@ defmodule Nms do
     if x1 < x2 && y1 < y2 do
       intersection = (x2-x1)*(y2-y1)
       union        = aarea + barea - intersection
-      intersection/(union + 1.0e-5)
+      intersection/union
     else
       0.0
     end
